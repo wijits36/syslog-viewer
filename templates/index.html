@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syslog Viewer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Syslog Viewer</h1>
+        <div class="controls">
+            <label for="host-filter">Machine:</label>
+            <select id="host-filter">
+                <option value="">All machines</option>
+            </select>
+            <label for="search">Search:</label>
+            <input type="text" id="search" placeholder="Filter logs...">
+            <button id="sort-toggle" class="sort-btn">Newest first</button>
+            <label class="checkbox-label">
+                <input type="checkbox" id="auto-scroll" checked>
+                Auto-scroll
+            </label>
+            <span id="status" class="status disconnected">Disconnected</span>
+            <a href="/logout" class="logout-btn">Logout</a>
+        </div>
+    </header>
+
+    <main>
+        <div id="log-container"></div>
+    </main>
+
+    <footer>
+        <span id="log-count">0 entries</span>
+        <span id="filtered-count"></span>
+    </footer>
+
+    <script>
+        const logContainer = document.getElementById('log-container');
+        const hostFilter = document.getElementById('host-filter');
+        const searchInput = document.getElementById('search');
+        const sortToggle = document.getElementById('sort-toggle');
+        const autoScrollCheckbox = document.getElementById('auto-scroll');
+        const statusIndicator = document.getElementById('status');
+        const logCountEl = document.getElementById('log-count');
+        const filteredCountEl = document.getElementById('filtered-count');
+
+        let allLogs = [];
+        let knownHosts = new Set();
+        let newestFirst = true;
+
+        // Connect to WebSocket
+        const socket = io();
+
+        socket.on('connect', () => {
+            statusIndicator.textContent = 'Connected';
+            statusIndicator.className = 'status connected';
+        });
+
+        socket.on('disconnect', () => {
+            statusIndicator.textContent = 'Disconnected';
+            statusIndicator.className = 'status disconnected';
+        });
+
+        socket.on('log_entry', (entry) => {
+            addLogEntry(entry, true);
+        });
+
+        // Load initial logs
+        async function loadInitialLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const data = await response.json();
+
+                data.hosts.forEach(host => {
+                    addHostOption(host);
+                });
+
+                // Reverse if newest first (data comes oldest-first from server)
+                const logs = newestFirst ? [...data.logs].reverse() : data.logs;
+                logs.forEach(entry => addLogEntry(entry, false));
+                updateCounts();
+            } catch (error) {
+                console.error('Failed to load initial logs:', error);
+            }
+        }
+
+        function addHostOption(hostname) {
+            if (!knownHosts.has(hostname)) {
+                knownHosts.add(hostname);
+                const option = document.createElement('option');
+                option.value = hostname;
+                option.textContent = hostname;
+                hostFilter.appendChild(option);
+            }
+        }
+
+        function addLogEntry(entry, isNew) {
+            // Add host to filter if new
+            if (entry.hostname && entry.hostname !== 'unknown') {
+                addHostOption(entry.hostname);
+            }
+
+            // Create log element
+            const logEl = document.createElement('div');
+            logEl.className = `log-entry level-${entry.level}`;
+            logEl.dataset.hostname = entry.hostname;
+            logEl.dataset.message = entry.message.toLowerCase();
+
+            logEl.innerHTML = `
+                <span class="timestamp">${escapeHtml(entry.timestamp)}</span>
+                <span class="hostname">${escapeHtml(entry.hostname)}</span>
+                <span class="process">${escapeHtml(entry.process)}</span>
+                <span class="message">${escapeHtml(entry.message)}</span>
+            `;
+
+            // Apply current filter
+            if (!matchesFilter(entry)) {
+                logEl.style.display = 'none';
+            }
+
+            // Insert based on sort order
+            if (isNew && newestFirst) {
+                // New entries go at the top when newest-first
+                allLogs.unshift(entry);
+                logContainer.insertBefore(logEl, logContainer.firstChild);
+            } else {
+                // Append at end
+                allLogs.push(entry);
+                logContainer.appendChild(logEl);
+            }
+
+            // Limit DOM elements (remove from opposite end)
+            while (logContainer.children.length > 2000) {
+                if (newestFirst) {
+                    logContainer.removeChild(logContainer.lastChild);
+                    allLogs.pop();
+                } else {
+                    logContainer.removeChild(logContainer.firstChild);
+                    allLogs.shift();
+                }
+            }
+
+            if (isNew) {
+                updateCounts();
+                if (autoScrollCheckbox.checked && matchesFilter(entry)) {
+                    if (newestFirst) {
+                        logContainer.scrollTop = 0;
+                    } else {
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                    }
+                }
+            }
+        }
+
+        function matchesFilter(entry) {
+            const selectedHost = hostFilter.value;
+            const searchTerm = searchInput.value.toLowerCase();
+
+            if (selectedHost && entry.hostname !== selectedHost) {
+                return false;
+            }
+            if (searchTerm && !entry.message.toLowerCase().includes(searchTerm) &&
+                !entry.process.toLowerCase().includes(searchTerm)) {
+                return false;
+            }
+            return true;
+        }
+
+        function applyFilter() {
+            const entries = logContainer.querySelectorAll('.log-entry');
+            let visibleCount = 0;
+
+            entries.forEach((el, index) => {
+                const entry = allLogs[index];
+                if (entry && matchesFilter(entry)) {
+                    el.style.display = '';
+                    visibleCount++;
+                } else {
+                    el.style.display = 'none';
+                }
+            });
+
+            updateCounts();
+        }
+
+        function updateCounts() {
+            const total = allLogs.length;
+            const visible = logContainer.querySelectorAll('.log-entry:not([style*="display: none"])').length;
+
+            logCountEl.textContent = `${total} entries`;
+            if (visible !== total) {
+                filteredCountEl.textContent = `(${visible} shown)`;
+            } else {
+                filteredCountEl.textContent = '';
+            }
+        }
+
+        function scrollToBottom() {
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function toggleSortOrder() {
+            newestFirst = !newestFirst;
+            sortToggle.textContent = newestFirst ? 'Newest first' : 'Oldest first';
+
+            // Re-render all logs in reversed order
+            logContainer.innerHTML = '';
+            const logsToRender = [...allLogs].reverse();
+            allLogs = [];
+            logsToRender.forEach(entry => addLogEntry(entry, false));
+        }
+
+        // Event listeners
+        hostFilter.addEventListener('change', applyFilter);
+        searchInput.addEventListener('input', applyFilter);
+        sortToggle.addEventListener('click', toggleSortOrder);
+
+        // Initialize
+        loadInitialLogs();
+    </script>
+</body>
+</html>

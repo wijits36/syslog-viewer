@@ -1,0 +1,22 @@
+[Unit]
+Description=Syslog Web Viewer
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/syslog-viewer
+EnvironmentFile=/etc/syslog-viewer/syslog-viewer.env
+ExecStart=/opt/syslog-viewer/venv/bin/python /opt/syslog-viewer/app.py
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/
+ReadWritePaths=/opt/syslog-viewer
+
+[Install]
+WantedBy=multi-user.target
