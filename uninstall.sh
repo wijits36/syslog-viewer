@@ -12,7 +12,7 @@ fi
 echo "=== Syslog Viewer Uninstall ==="
 echo
 
-read -p "This will remove Syslog Viewer and all its configuration. Continue? [y/N] " CONFIRM
+read -rp "This will remove Syslog Viewer and all its configuration. Continue? [y/N] " CONFIRM
 if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
     echo "Uninstall cancelled."
     exit 0

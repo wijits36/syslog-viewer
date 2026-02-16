@@ -19,6 +19,7 @@ echo
 # Detect OS family
 OS_ID=""
 OS_ID_LIKE=""
+# shellcheck source=/dev/null
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS_ID="$ID"
@@ -45,13 +46,13 @@ fi
 # Prompt for password if config doesn't exist
 if [ ! -f "$CONFIG_FILE" ]; then
     while true; do
-        read -s -p "Set a password for the web interface: " PASSWORD
+        read -rs -p "Set a password for the web interface: " PASSWORD
         echo
         if [ -z "$PASSWORD" ]; then
             echo "Password cannot be empty. Please try again."
             continue
         fi
-        read -s -p "Confirm password: " PASSWORD_CONFIRM
+        read -rs -p "Confirm password: " PASSWORD_CONFIRM
         echo
         if [ "$PASSWORD" != "$PASSWORD_CONFIRM" ]; then
             echo "Passwords do not match. Please try again."
@@ -70,6 +71,7 @@ mkdir -p "$CONFIG_DIR"
 # Copy application files
 echo "Copying application files..."
 cp app.py "$INSTALL_DIR/"
+cp syslog_parser.py "$INSTALL_DIR/"
 cp requirements.txt "$INSTALL_DIR/"
 cp -r templates "$INSTALL_DIR/"
 cp -r static "$INSTALL_DIR/"
@@ -152,7 +154,8 @@ echo
 echo "Service status:"
 systemctl status syslog-viewer --no-pager --lines=0
 echo
-echo "Access the web interface at: https://$(hostname -I | awk '{print $1}')"
+LOCAL_IP=$(hostname -I | awk '{print $1}')
+echo "Access the web interface at: https://$LOCAL_IP"
 echo
 echo "Useful commands:"
 echo "  View logs:      journalctl -u syslog-viewer -f"
