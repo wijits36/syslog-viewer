@@ -16,6 +16,32 @@ CONFIG_FILE="$CONFIG_DIR/syslog-viewer.env"
 echo "=== Syslog Viewer Installation ==="
 echo
 
+# Detect OS family
+OS_ID=""
+OS_ID_LIKE=""
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS_ID="$ID"
+    OS_ID_LIKE="$ID_LIKE"
+fi
+
+# Detect correct syslog file path
+if [ -f /var/log/messages ]; then
+    DEFAULT_SYSLOG_FILE="/var/log/messages"
+elif [ -f /var/log/syslog ]; then
+    DEFAULT_SYSLOG_FILE="/var/log/syslog"
+else
+    DEFAULT_SYSLOG_FILE="/var/log/messages"
+fi
+
+# Ensure python3-venv is available (needed on Ubuntu/Debian)
+if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" || "$OS_ID_LIKE" == *"debian"* ]]; then
+    if ! python3 -c "import venv" 2>/dev/null; then
+        echo "Installing python3-venv..."
+        apt-get update -qq && apt-get install -y -qq python3-venv
+    fi
+fi
+
 # Prompt for password if config doesn't exist
 if [ ! -f "$CONFIG_FILE" ]; then
     while true; do
@@ -77,8 +103,8 @@ SYSLOG_PASSWORD=$PASSWORD
 # Secret key for session encryption
 SECRET_KEY=$SECRET_KEY
 
-# Path to syslog file
-SYSLOG_FILE=/var/log/messages
+# Path to syslog file (auto-detected: $DEFAULT_SYSLOG_FILE)
+SYSLOG_FILE=$DEFAULT_SYSLOG_FILE
 
 # Number of log lines to load on startup
 INITIAL_LINES=2000
@@ -103,12 +129,17 @@ echo "Starting service..."
 systemctl enable syslog-viewer --quiet
 systemctl start syslog-viewer
 
-# Configure firewall if firewalld is available
+# Configure firewall
 if command -v firewall-cmd &> /dev/null; then
     if systemctl is-active --quiet firewalld; then
-        echo "Configuring firewall..."
+        echo "Configuring firewalld..."
         firewall-cmd --add-port=443/tcp --permanent --quiet
         firewall-cmd --reload --quiet
+    fi
+elif command -v ufw &> /dev/null; then
+    if ufw status | grep -q "Status: active"; then
+        echo "Configuring ufw..."
+        ufw allow 443/tcp
     fi
 else
     echo

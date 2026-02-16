@@ -54,10 +54,18 @@ fi
 if command -v firewall-cmd &> /dev/null; then
     if systemctl is-active --quiet firewalld; then
         if firewall-cmd --query-port=443/tcp --quiet 2>/dev/null; then
-            echo "Removing firewall rule..."
+            echo "Removing firewalld rule..."
             firewall-cmd --remove-port=443/tcp --permanent --quiet
             firewall-cmd --reload --quiet
         fi
+    fi
+fi
+
+# Remove ufw rule if applicable
+if command -v ufw &> /dev/null; then
+    if ufw status | grep -q "443/tcp"; then
+        echo "Removing ufw rule..."
+        ufw delete allow 443/tcp
     fi
 fi
 

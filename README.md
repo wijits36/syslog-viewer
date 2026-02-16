@@ -45,7 +45,7 @@ Configuration is stored in `/etc/syslog-viewer/syslog-viewer.env`:
 |----------|---------|-------------|
 | `SYSLOG_PASSWORD` | *(required)* | Password for web interface |
 | `SECRET_KEY` | *(auto-generated)* | Flask session encryption key |
-| `SYSLOG_FILE` | `/var/log/messages` | Path to syslog file |
+| `SYSLOG_FILE` | *(auto-detected)* | Path to syslog file (auto-detects `/var/log/messages` or `/var/log/syslog`) |
 | `INITIAL_LINES` | `2000` | Number of log lines to load on startup |
 | `SSL_CERT` | `/opt/syslog-viewer/cert.pem` | Path to SSL certificate |
 | `SSL_KEY` | `/opt/syslog-viewer/key.pem` | Path to SSL private key |
@@ -131,6 +131,27 @@ export PORT=8443
 python app.py
 ```
 
+## Testing
+
+Run the automated test suite:
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+To skip Selenium end-to-end tests (which require Chrome):
+
+```bash
+pytest -m "not e2e"
+```
+
+See [docs/manual-tests.md](docs/manual-tests.md) for the manual test plan.
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file.
+
+---
+
+Built with [Claude Code](https://claude.ai/code)
